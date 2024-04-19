@@ -29,13 +29,21 @@ class Policy(nn.Module):
 
 class Agent():
 
-    def __init__(self,policy, gamma = .99):
+    def __init__(self,policy, gamma = .99, eta=10.0):
         self.policy = policy
         self.gamma = gamma
+        self.eta = eta
         self.optimizer = optim.Adam(policy.parameters(), lr=1e-2)
         self.rewards = []
         self.saved_log_probs = []
 #        self.eps = np.finfo(np.float32).eps.item()
+
+    def calculate_entropy(self):
+        H = 0
+        for log_prob in self.saved_log_probs:
+            H += log_prob.item()*np.exp(log_prob.item())
+        return -1 * self.eta * H
+        
 
     def select_action(self,state):
         state = torch.from_numpy(state).float().unsqueeze(0)
@@ -54,12 +62,14 @@ class Agent():
             rewards.appendleft(R)
         rewards = torch.tensor(rewards)
 #        returns = (rewards - rewards.mean()) / (rewards.std() + eps)
+        entropy = self.calculate_entropy()
         for log_prob, R in zip(self.saved_log_probs, rewards):
-            policy_loss.append(-log_prob * R)
+            policy_loss.append(-log_prob * R + entropy)
         self.optimizer.zero_grad()
         policy_loss = torch.cat(policy_loss).sum()
         policy_loss.backward()
         self.optimizer.step()
+        print(self.saved_log_probs)
         del self.rewards[:]
         del self.saved_log_probs[:]
 
@@ -84,9 +94,12 @@ def main():
             state, reward, done, truncated, _ = env.step(action)
             reward = reward + np.abs(state[1]) # add speed to reward to encourage speeding up
             if state[0] > -.2:
-                reward = 1 # add reward of 1 for reaching up high enough up the slope
+                reward += 1 # add reward of 1 for reaching up high enough up the slope
             agent.rewards.append(reward)
             ep_reward += reward
+            if truncated:
+                #print('episode truncated')
+                break
             if done: # don't reset trace after truncation, not sure if this is correct
                 print('flag reached!')
                 break
@@ -96,8 +109,12 @@ def main():
         if i_episode % 10 == 0:
             print('Episode {}\tLast reward: {:.2f}\tAverage reward: {:.2f}'.format(
                   i_episode, ep_reward, running_reward))
-        if (i_episode>500):
-            print("Solved! Running reward is now {} and "
+        if (i_episode>5000):
+            print("Max number of episodes reached! Running reward is now {} and "
+                  "the last episode runs to {} time steps!".format(running_reward, t))
+            break
+        if done:
+            print("Flag reached! Running reward is now {} and "
                   "the last episode runs to {} time steps!".format(running_reward, t))
             break
 
