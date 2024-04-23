@@ -19,17 +19,19 @@ from scipy.signal import savgol_filter
 
 class Policy(nn.Module):
 
-    def __init__(self, n_observations, n_actions,layer1=16,layer2=16,activation=F.leaky_relu):
+    def __init__(self, n_observations, n_actions,layer1=16,layer2=16,activation=F.leaky_relu, output_activation=torch.nn.Softmax()):
         super(Policy, self).__init__()
         self.layer1 = nn.Linear(n_observations, layer1)
         self.layer2 = nn.Linear(layer1, layer2)
         self.layer3 = nn.Linear(layer2, n_actions)
         self.activation = activation
+        self.output_activation = output_activation
 
     def forward(self, x):
         x = self.activation(self.layer1(x))
         x = self.activation(self.layer2(x))
-        return F.softmax(self.layer3(x),dim=0)
+        x = self.output_activation(self.layer3(x))
+        return x
 
 class Agent():
 
@@ -77,11 +79,19 @@ class Agent():
         del self.rewards[:]
         del self.saved_log_probs[:]
 
+    def update_value_function(self, state_vals, Q_vals):
+        loss_function = nn.MSELoss
+        loss = loss_function(state_vals, Q_vals)
+        self.optimizer.zero_grad()
+        loss.backward()
+        self.optimizer.step()
+
 def smooth(y, window, poly=2):
     return savgol_filter(y, window, poly)
 
 def main():
-
+    n_step = 5
+    gamma = .99
     env = gym.make('Acrobot-v1')
     eval_env = gym.make('Acrobot-v1',render_mode='human')
 
@@ -90,13 +100,17 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     policy_net = Policy(observation_space, action_space).to(device)
-    agent = Agent(policy_net)
+    value_function = Policy(observation_space, action_space, output_activation=torch.nn.ReLU()).to(device)
+    agent = Agent(policy_net, gamma=gamma)
+    value_agent = Agent(value_function, gamma=gamma)
     running_reward = -100
     
     episode_rewards = []
     for i_episode in count(1):
         state, _ = env.reset()
         ep_reward = 0
+        trace_states = []
+        Q_trace = []
         for t in range(1, 10000):  # Don't infinite loop while learning
             action = agent.select_action(state)
             state, reward, done, truncated, _ = env.step(action)
@@ -104,14 +118,33 @@ def main():
             #if state[0] > -.2:
             #    reward += 1 # add reward of 1 for reaching up high enough up the slope
             agent.rewards.append(reward)
+            trace_states.append(state)
             ep_reward += reward
             if truncated:
                 #print('episode truncated')
+                T = t
                 break
             if done: # don't reset trace after truncation, not sure if this is correct
                 print('Goal reached!')
+                T = t
                 break
+        trace_states = torch.tensor(trace_states)
+        for t in range(T):
+            Q = 0
+            if t+n_step > T:
+                n_step_net = T-t
+            else:
+                n_step_net = n_step
+                V_end = value_function.forward(trace_states[t]).item()
+                Q += gamma**n_step_net * V_end
 
+            for k in range(n_step_net):
+                Q += gamma**k * agent.rewards[t+k]
+            Q_trace.append(Q)
+        
+        state_values = value_function(trace_states).to(device)
+        Q_trace = torch.tensor(Q_trace).view(-1,1)
+        value_agent.update_value_function(state_values, Q_trace)
         running_reward = 0.05 * ep_reward + (1 - 0.05) * running_reward
         agent.update_policy()
         episode_rewards.append(ep_reward)
