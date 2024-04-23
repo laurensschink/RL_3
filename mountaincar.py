@@ -29,7 +29,7 @@ class Policy(nn.Module):
 
 class Agent():
 
-    def __init__(self,policy, gamma = .99, eta=10.0):
+    def __init__(self,policy, gamma = .99, eta=1.0):
         self.policy = policy
         self.gamma = gamma
         self.eta = eta
@@ -42,6 +42,7 @@ class Agent():
         H = 0
         for log_prob in self.saved_log_probs:
             H += log_prob.item()*np.exp(log_prob.item())
+        print(H)
         return -1 * self.eta * H
         
 
@@ -65,11 +66,11 @@ class Agent():
         entropy = self.calculate_entropy()
         for log_prob, R in zip(self.saved_log_probs, rewards):
             policy_loss.append(-log_prob * R + entropy)
-        self.optimizer.zero_grad()
+        
         policy_loss = torch.cat(policy_loss).sum()
         policy_loss.backward()
         self.optimizer.step()
-        print(self.saved_log_probs)
+        self.optimizer.zero_grad()
         del self.rewards[:]
         del self.saved_log_probs[:]
 
