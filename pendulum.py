@@ -7,7 +7,11 @@ from torch.distributions import Categorical
 from collections import deque
 from itertools import count
 import numpy as np
+import matplotlib
+matplotlib.use('tkAgg')
+import matplotlib.pyplot as plt
 
+from scipy.signal import savgol_filter
 
 # Combined example from https://github.com/pytorch/examples/blob/main/reinforcement_learning/reinforce.py
 # With tips from: https://stats.stackexchange.com/questions/336531/how-to-initialize-policy-for-mountain-car-problem
@@ -42,7 +46,6 @@ class Agent():
         H = 0
         for log_prob in self.saved_log_probs:
             H += log_prob.item()*np.exp(log_prob.item())
-        print(H)
         return -1 * self.eta * H
         
 
@@ -74,11 +77,13 @@ class Agent():
         del self.rewards[:]
         del self.saved_log_probs[:]
 
+def smooth(y, window, poly=2):
+    return savgol_filter(y, window, poly)
 
 def main():
 
-    env = gym.make('MountainCar-v0')
-    eval_env = gym.make('MountainCar-v0',render_mode='human')
+    env = gym.make('Acrobot-v1')
+    eval_env = gym.make('Acrobot-v1',render_mode='human')
 
     action_space = env.action_space.n
     observation_space = env.observation_space.shape[0]
@@ -86,38 +91,51 @@ def main():
 
     policy_net = Policy(observation_space, action_space).to(device)
     agent = Agent(policy_net)
-    running_reward = 10
+    running_reward = -100
+    
+    episode_rewards = []
     for i_episode in count(1):
         state, _ = env.reset()
         ep_reward = 0
         for t in range(1, 10000):  # Don't infinite loop while learning
             action = agent.select_action(state)
             state, reward, done, truncated, _ = env.step(action)
-            reward = reward + np.abs(state[1]) # add speed to reward to encourage speeding up
-            if state[0] > -.2:
-                reward += 1 # add reward of 1 for reaching up high enough up the slope
+            #reward = reward + np.abs(state[1]) # add speed to reward to encourage speeding up
+            #if state[0] > -.2:
+            #    reward += 1 # add reward of 1 for reaching up high enough up the slope
             agent.rewards.append(reward)
             ep_reward += reward
             if truncated:
                 #print('episode truncated')
                 break
             if done: # don't reset trace after truncation, not sure if this is correct
-                print('flag reached!')
+                print('Goal reached!')
                 break
 
         running_reward = 0.05 * ep_reward + (1 - 0.05) * running_reward
         agent.update_policy()
+        episode_rewards.append(ep_reward)
         if i_episode % 10 == 0:
             print('Episode {}\tLast reward: {:.2f}\tAverage reward: {:.2f}'.format(
                   i_episode, ep_reward, running_reward))
-        if (i_episode>5000):
+        if (i_episode>500):
             print("Max number of episodes reached! Running reward is now {} and "
                   "the last episode runs to {} time steps!".format(running_reward, t))
             break
-        if done:
-            print("Flag reached! Running reward is now {} and "
-                  "the last episode runs to {} time steps!".format(running_reward, t))
-            break
+        #if done:
+        #    print("Goal reached! Running reward is now {} and "
+        #          "the last episode runs to {} time steps!".format(running_reward, t))
+        #    break
+    
+    #Plot results
+    episode_rewards = smooth(episode_rewards, 3)
+    eps = range(i_episode)
+    plt.plot(eps, episode_rewards)
+    plt.title('Reward Function')
+    plt.xlabel('Episode')
+    plt.ylabel('Rolling Average of Reward')
+    plt.show()
 
+    env.close()
 if __name__ == '__main__':
     main()
