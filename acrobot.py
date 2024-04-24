@@ -96,7 +96,7 @@ def smooth(y, window, poly=2):
     #Helper function to smooth loss functions
     return savgol_filter(y, window, poly)
 
-def main(bootstrap=True, baseline=True, n_step=5, gamma=.99, lr=1e-2, eta=10.0):
+def main(bootstrap=True, baseline=True, n_step=5, gamma=.99, lr=1e-2, eta=1.0):
     """
     Main function to run a policy-based deep reinforcement learning run on the acrobot environment.
     Acrobot is relatively reward-scarce, only gains any reward when reaching goal.
@@ -114,6 +114,7 @@ def main(bootstrap=True, baseline=True, n_step=5, gamma=.99, lr=1e-2, eta=10.0):
     env = gym.make('Acrobot-v1')
     eval_env = gym.make('Acrobot-v1',render_mode='human')
 
+    max_eps = 2000
     action_space = env.action_space.n
     observation_space = env.observation_space.shape[0]
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -180,9 +181,9 @@ def main(bootstrap=True, baseline=True, n_step=5, gamma=.99, lr=1e-2, eta=10.0):
         running_reward = 0.05 * ep_reward + (1 - 0.05) * running_reward
         episode_rewards.append(ep_reward)
         if i_episode % 10 == 0:
-            print('Episode {}\tLast reward: {:.2f}\tAverage reward: {:state_vals.2f}'.format(
+            print('Episode {}\tLast reward: {:.2f}\tAverage reward: {:.2f}'.format(
                   i_episode, ep_reward, running_reward))
-        if (i_episode>500):
+        if (i_episode>max_eps):
             print("Max number of episodes reached! Running reward is now {} and "
                   "the last episode runs to {} time steps!".format(running_reward, t))
             break
