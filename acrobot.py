@@ -19,7 +19,7 @@ from scipy.signal import savgol_filter
 
 class Policy(nn.Module):
 
-    def __init__(self, n_observations, n_actions,layer1=16,layer2=16,activation=F.leaky_relu, output_activation=torch.nn.Softmax(dim=1)):
+    def __init__(self, n_observations, n_actions,layer1=16,layer2=16,activation=F.leaky_relu, output_activation=torch.nn.Softmax(dim=0)):
         super(Policy, self).__init__()
         self.layer1 = nn.Linear(n_observations, layer1)
         self.layer2 = nn.Linear(layer1, layer2)
@@ -35,11 +35,11 @@ class Policy(nn.Module):
 
 class Agent():
 
-    def __init__(self,policy, gamma = .99, eta=1.0):
+    def __init__(self,policy, gamma = .99, eta=1.0, lr=1e-2):
         self.policy = policy
         self.gamma = gamma
         self.eta = eta
-        self.optimizer = optim.Adam(policy.parameters(), lr=1e-2)
+        self.optimizer = optim.Adam(policy.parameters(), lr=lr)
         self.rewards = []
         self.saved_log_probs = []
 #        self.eps = np.finfo(np.float32).eps.item()
@@ -58,7 +58,7 @@ class Agent():
         self.saved_log_probs.append(m.log_prob(action))
         return action.item()
 
-    def update_policy(self):
+    def update_policy(self, advantage=None):
         R = 0
         policy_loss = []
         rewards = deque()
@@ -69,7 +69,10 @@ class Agent():
 #        returns = (rewards - rewards.mean()) / (rewards.std() + eps)
         entropy = self.calculate_entropy()
         for log_prob, R in zip(self.saved_log_probs, rewards):
-            policy_loss.append(-log_prob * R + entropy)
+            if advantage==None:
+                policy_loss.append(-log_prob * R + entropy)
+            else:
+                policy_loss.append(-log_prob*advantage + entropy)
         
         policy_loss = torch.cat(policy_loss).sum()
         policy_loss.backward()
@@ -79,7 +82,7 @@ class Agent():
         del self.saved_log_probs[:]
 
     def update_value_function(self, state_vals, Q_vals):
-        loss_function = nn.MSELoss
+        loss_function = nn.MSELoss()
         loss = loss_function(state_vals, Q_vals)
         self.optimizer.zero_grad()
         loss.backward()
@@ -88,9 +91,7 @@ class Agent():
 def smooth(y, window, poly=2):
     return savgol_filter(y, window, poly)
 
-def main():
-    n_step = 5
-    gamma = .99
+def main(bootstrap=True, n_step=5, gamma=.99, lr=1e-2, eta=10.0):
     env = gym.make('Acrobot-v1')
     eval_env = gym.make('Acrobot-v1',render_mode='human')
 
@@ -99,11 +100,12 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     policy_net = Policy(observation_space, action_space).to(device)
-    value_function = Policy(observation_space, action_space, output_activation=torch.nn.ReLU()).to(device)
-    agent = Agent(policy_net, gamma=gamma)
-    value_agent = Agent(value_function, gamma=gamma)
+    agent = Agent(policy_net, gamma=gamma, lr=lr, eta=eta)
     running_reward = -100
-    
+    if bootstrap:
+        value_function = Policy(observation_space, 1, output_activation=torch.nn.ReLU()).to(device)
+        value_agent = Agent(value_function, gamma=gamma, lr=lr, eta=eta)
+
     episode_rewards = []
     for i_episode in count(1):
         state, _ = env.reset()
@@ -130,25 +132,33 @@ def main():
                 print('Goal reached!')
                 T = t
                 break
-        for t in range(T):
-            Q = 0
-            if t+n_step > T:
-                n_step_net = T-t
-            else:
-                n_step_net = n_step
-                print(value_function.forward(trace_states[t]))
-                V_end = value_function.forward(trace_states[t]).item()
-                Q += gamma**n_step_net * V_end
 
-            for k in range(n_step_net):
-                Q += gamma**k * agent.rewards[t+k]
-            Q_trace.append(Q)
-        
-        state_values = value_function(trace_states).to(device)
-        Q_trace = torch.tensor(Q_trace).view(-1,1)
-        value_agent.update_value_function(state_values, Q_trace)
+        if bootstrap:    
+            for t in range(T):
+                Q = 0
+                if t+n_step > T:
+                    n_step_net = T-t
+                else:
+                    n_step_net = n_step
+                    V_end = value_function.forward(trace_states[t]).item()
+                    Q += gamma**n_step_net * V_end
+
+                for k in range(n_step_net):
+                    Q += gamma**k * agent.rewards[t+k]
+                Q_trace.append(Q)
+            
+            trace_states = np.vstack(trace_states).astype(float)
+            trace_states = torch.FloatTensor(trace_states).to(device)
+            state_values = value_function(trace_states).to(device)
+            Q_trace = torch.tensor(Q_trace).view(-1,1)
+            with torch.no_grad():
+                advantages = Q_trace - state_values
+            value_agent.update_value_function(state_values, Q_trace)
+            agent.update_policy(advantages)
+        else:
+            agent.update_policy()
+
         running_reward = 0.05 * ep_reward + (1 - 0.05) * running_reward
-        agent.update_policy()
         episode_rewards.append(ep_reward)
         if i_episode % 10 == 0:
             print('Episode {}\tLast reward: {:.2f}\tAverage reward: {:.2f}'.format(
