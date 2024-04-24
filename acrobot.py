@@ -15,11 +15,11 @@ from scipy.signal import savgol_filter
 
 # Combined example from https://github.com/pytorch/examples/blob/main/reinforcement_learning/reinforce.py
 # With tips from: https://stats.stackexchange.com/questions/336531/how-to-initialize-policy-for-mountain-car-problem
-
+# Actor critic algorithms implementation inspired by https://medium.com/@ym1942/policy-gradient-methods-from-reinforce-to-actor-critic-d56ff0f0af0a
 
 class Policy(nn.Module):
 
-    def __init__(self, n_observations, n_actions,layer1=16,layer2=16,activation=F.leaky_relu, output_activation=torch.nn.Softmax()):
+    def __init__(self, n_observations, n_actions,layer1=16,layer2=16,activation=F.leaky_relu, output_activation=torch.nn.Softmax(dim=1)):
         super(Policy, self).__init__()
         self.layer1 = nn.Linear(n_observations, layer1)
         self.layer2 = nn.Linear(layer1, layer2)
@@ -52,7 +52,6 @@ class Agent():
         
 
     def select_action(self,state):
-        state = torch.from_numpy(state).float().unsqueeze(0)
         action_probs = self.policy(state)
         m = Categorical(action_probs)
         action = m.sample()
@@ -112,13 +111,16 @@ def main():
         trace_states = []
         Q_trace = []
         for t in range(1, 10000):  # Don't infinite loop while learning
+            state = torch.from_numpy(state).float().unsqueeze(0)
+            trace_states.append(state)
             action = agent.select_action(state)
             state, reward, done, truncated, _ = env.step(action)
             #reward = reward + np.abs(state[1]) # add speed to reward to encourage speeding up
             #if state[0] > -.2:
             #    reward += 1 # add reward of 1 for reaching up high enough up the slope
             agent.rewards.append(reward)
-            trace_states.append(state)
+            #state = torch.from_numpy(state).float().unsqueeze(0)
+            #trace_states.append(state)
             ep_reward += reward
             if truncated:
                 #print('episode truncated')
@@ -128,13 +130,13 @@ def main():
                 print('Goal reached!')
                 T = t
                 break
-        trace_states = torch.tensor(trace_states)
         for t in range(T):
             Q = 0
             if t+n_step > T:
                 n_step_net = T-t
             else:
                 n_step_net = n_step
+                print(value_function.forward(trace_states[t]))
                 V_end = value_function.forward(trace_states[t]).item()
                 Q += gamma**n_step_net * V_end
 
