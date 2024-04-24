@@ -91,7 +91,7 @@ class Agent():
 def smooth(y, window, poly=2):
     return savgol_filter(y, window, poly)
 
-def main(bootstrap=True, n_step=5, gamma=.99, lr=1e-2, eta=10.0):
+def main(bootstrap=True, baseline=True, n_step=5, gamma=.99, lr=1e-2, eta=10.0):
     env = gym.make('Acrobot-v1')
     eval_env = gym.make('Acrobot-v1',render_mode='human')
 
@@ -102,7 +102,7 @@ def main(bootstrap=True, n_step=5, gamma=.99, lr=1e-2, eta=10.0):
     policy_net = Policy(observation_space, action_space).to(device)
     agent = Agent(policy_net, gamma=gamma, lr=lr, eta=eta)
     running_reward = -100
-    if bootstrap:
+    if bootstrap or baseline:
         value_function = Policy(observation_space, 1, output_activation=torch.nn.ReLU()).to(device)
         value_agent = Agent(value_function, gamma=gamma, lr=lr, eta=eta)
 
@@ -133,7 +133,9 @@ def main(bootstrap=True, n_step=5, gamma=.99, lr=1e-2, eta=10.0):
                 T = t
                 break
 
-        if bootstrap:    
+        if bootstrap or baseline:
+            if not bootstrap:
+                n_step = 0
             for t in range(T):
                 Q = 0
                 if t+n_step > T:
@@ -154,14 +156,17 @@ def main(bootstrap=True, n_step=5, gamma=.99, lr=1e-2, eta=10.0):
             with torch.no_grad():
                 advantages = Q_trace - state_values
             value_agent.update_value_function(state_values, Q_trace)
-            agent.update_policy(advantages)
+            if baseline:
+                agent.update_policy(advantages)
+            else:
+                agent.update_policy(Q_trace)
         else:
             agent.update_policy()
 
         running_reward = 0.05 * ep_reward + (1 - 0.05) * running_reward
         episode_rewards.append(ep_reward)
         if i_episode % 10 == 0:
-            print('Episode {}\tLast reward: {:.2f}\tAverage reward: {:.2f}'.format(
+            print('Episode {}\tLast reward: {:.2f}\tAverage reward: {:state_vals.2f}'.format(
                   i_episode, ep_reward, running_reward))
         if (i_episode>500):
             print("Max number of episodes reached! Running reward is now {} and "
