@@ -42,9 +42,10 @@ class Agent():
         self.optimizer = optim.Adam(policy.parameters(), lr=lr)
         self.rewards = []
         self.saved_log_probs = []
-#        self.eps = np.finfo(np.float32).eps.item()
 
     def calculate_entropy(self):
+        #Entropy defined as sum(p(s)log(p(s))), from the lecture slides
+        #Used for exploration
         H = 0
         for log_prob in self.saved_log_probs:
             H += log_prob.item()*np.exp(log_prob.item())
@@ -58,21 +59,23 @@ class Agent():
         self.saved_log_probs.append(m.log_prob(action))
         return action.item()
 
-    def update_policy(self, advantage=None):
+    def update_policy(self, value_func=None):
         R = 0
         policy_loss = []
         rewards = deque()
         for reward in self.rewards[::-1]:
+            #Update rewards
             R = reward + self.gamma * R
             rewards.appendleft(R)
         rewards = torch.tensor(rewards)
-#        returns = (rewards - rewards.mean()) / (rewards.std() + eps)
         entropy = self.calculate_entropy()
         for log_prob, R in zip(self.saved_log_probs, rewards):
-            if advantage==None:
+            if value_func==None:
+                #Pure REINFORCE policy update
                 policy_loss.append(-log_prob * R + entropy)
             else:
-                policy_loss.append(-log_prob*advantage + entropy)
+                #Update policy with value function
+                policy_loss.append(-log_prob*value_func + entropy)
         
         policy_loss = torch.cat(policy_loss).sum()
         policy_loss.backward()
@@ -82,6 +85,7 @@ class Agent():
         del self.saved_log_probs[:]
 
     def update_value_function(self, state_vals, Q_vals):
+        #Updates value function using mean square error between state and Q-values
         loss_function = nn.MSELoss()
         loss = loss_function(state_vals, Q_vals)
         self.optimizer.zero_grad()
@@ -89,9 +93,24 @@ class Agent():
         self.optimizer.step()
 
 def smooth(y, window, poly=2):
+    #Helper function to smooth loss functions
     return savgol_filter(y, window, poly)
 
 def main(bootstrap=True, baseline=True, n_step=5, gamma=.99, lr=1e-2, eta=10.0):
+    """
+    Main function to run a policy-based deep reinforcement learning run on the acrobot environment.
+    Acrobot is relatively reward-scarce, only gains any reward when reaching goal.
+    It also terminates as soon as the goal is reached.
+    Aim is therefore to reach the goal as quickly and consitently as possible.
+
+    parameters:
+    bootstrap (bool): Turns actor-critic n-step bootstrapping on
+    baseline (bool): Turns actor critic baseline substraction on
+    n_step (int): number of steps for n-step bootstrapping
+    gamma (float): discount parameter
+    lr (float): learning rate
+    eta (float): entropy factor
+    """
     env = gym.make('Acrobot-v1')
     eval_env = gym.make('Acrobot-v1',render_mode='human')
 
@@ -117,18 +136,13 @@ def main(bootstrap=True, baseline=True, n_step=5, gamma=.99, lr=1e-2, eta=10.0):
             trace_states.append(state)
             action = agent.select_action(state)
             state, reward, done, truncated, _ = env.step(action)
-            #reward = reward + np.abs(state[1]) # add speed to reward to encourage speeding up
-            #if state[0] > -.2:
-            #    reward += 1 # add reward of 1 for reaching up high enough up the slope
             agent.rewards.append(reward)
-            #state = torch.from_numpy(state).float().unsqueeze(0)
-            #trace_states.append(state)
+            
             ep_reward += reward
             if truncated:
-                #print('episode truncated')
                 T = t
                 break
-            if done: # don't reset trace after truncation, not sure if this is correct
+            if done:
                 print('Goal reached!')
                 T = t
                 break
@@ -172,10 +186,7 @@ def main(bootstrap=True, baseline=True, n_step=5, gamma=.99, lr=1e-2, eta=10.0):
             print("Max number of episodes reached! Running reward is now {} and "
                   "the last episode runs to {} time steps!".format(running_reward, t))
             break
-        #if done:
-        #    print("Goal reached! Running reward is now {} and "
-        #          "the last episode runs to {} time steps!".format(running_reward, t))
-        #    break
+        
     
     #Plot results
     episode_rewards = smooth(episode_rewards, 3)
