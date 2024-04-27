@@ -32,6 +32,7 @@ class Reinforce():
         self.optimizer = optim.Adam(self.policy.parameters(), lr=lr)
         self.eps = np.finfo(np.float32).eps.item()
         self.saved_log_probs = []
+        self.entropies = []
         self.rewards = []
 
     def select_action(self,state):
@@ -39,6 +40,7 @@ class Reinforce():
         probs = self.policy(state)
         m = Categorical(probs)
         action = m.sample()
+        self.entropies.append(m.entropy())
         self.saved_log_probs.append(m.log_prob(action))
         return action.item()
 
@@ -50,11 +52,12 @@ class Reinforce():
             R = r + self.gamma * R
             returns.appendleft(R)
         returns = torch.tensor(returns)
+        entropy = torch.tensor(self.entropies)
         returns = (returns - returns.mean()) / (returns.std() + self.eps)
         for log_prob, R in zip(self.saved_log_probs, returns):
-            policy_loss.append(-log_prob * R)
+            policy_loss.append(-log_prob * R + self.eta * log_prob * torch.exp(log_prob))
         self.optimizer.zero_grad()
-        policy_loss = torch.cat(policy_loss).sum()
+        policy_loss = torch.cat(policy_loss).sum() 
         policy_loss.backward()
         self.optimizer.step()
         del self.rewards[:]
