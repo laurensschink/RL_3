@@ -5,6 +5,7 @@ from itertools import count
 
 import numpy as np # -> Todo: switch to torch
 
+from scipy.signal import savgol_filter
 import matplotlib
 matplotlib.use('tkAgg')
 import matplotlib.pyplot as plt
@@ -13,6 +14,9 @@ import matplotlib.pyplot as plt
 from reinforce_agent import Reinforce
 from ac3_agent import Ac3, Policy
 
+def smooth(y, window, poly=2):
+    #Helper function to smooth loss functions
+    return savgol_filter(y, window, poly)
 
 
 def experiment(bootstrap=False, baseline=False, n_step=5, gamma=.99, lr=1e-3, eta=.1):
@@ -39,65 +43,26 @@ def experiment(bootstrap=False, baseline=False, n_step=5, gamma=.99, lr=1e-3, et
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     agent = Reinforce(n_actions=action_space,n_observations=observation_space,gamma=gamma, lr=lr, eta=eta)
-    agent = Ac3(n_actions=action_space,n_observations=observation_space,gamma=gamma, lr=lr, eta=eta)
-    running_reward = -100
-    if bootstrap or baseline:
-        value_function = Policy(observation_space, 1, output_activation=nn.ReLU()).to(device)
-        value_agent = Ac3( n_actions=action_space,n_observations=observation_space, gamma=gamma, lr=lr, eta=eta)
-        value_agent.policy = value_function
-
+#    agent = Ac3(n_actions=action_space,n_observations=observation_space,bootstrap=True, baseline=True, gamma=gamma, lr=lr, eta=eta)
+    running_reward = -500
 
     episode_rewards = []
     for i_episode in count(1):
         state, _ = env.reset()
         ep_reward = 0
-        trace_states = []
-        Q_trace = []
+#        trace_states = []
+#        Q_trace = []
         for t in range(1, 10000):  # Don't infinite loop while learning
             state = torch.from_numpy(state).float().unsqueeze(0)
-            trace_states.append(state)
+#            trace_states.append(state)
             action = agent.select_action(state)
             state, reward, done, truncated, _ = env.step(action)
             agent.rewards.append(reward)
-            
             ep_reward += reward
-            if truncated:
-                T = t
-                break
-            if done:
-#                print('Goal reached!')
-                T = t
+            if done or truncated:
                 break
 
-        if bootstrap or baseline:
-            if not bootstrap:
-                n_step = 0
-            for t in range(T):
-                Q = 0
-                if t+n_step > T:
-                    n_step_net = T-t
-                else:
-                    n_step_net = n_step
-                    V_end = value_function.forward(trace_states[t]).item()
-                    Q += gamma**n_step_net * V_end
-
-                for k in range(n_step_net):
-                    Q += gamma**k * agent.rewards[t+k]
-                Q_trace.append(Q)
-            
-            trace_states = np.vstack(trace_states).astype(float)
-            trace_states = torch.FloatTensor(trace_states).to(device)
-            state_values = value_function(trace_states).to(device)
-            Q_trace = torch.tensor(Q_trace).view(-1,1)
-            with torch.no_grad():
-                advantages = Q_trace - state_values
-            value_agent.update_value_function(state_values, Q_trace)
-            if baseline:
-                agent.update_policy(advantages)
-            else:
-                agent.update_policy(Q_trace)
-        else:
-            agent.update_policy()
+        agent.update_policy()
 
         running_reward = 0.05 * ep_reward + (1 - 0.05) * running_reward
         episode_rewards.append(ep_reward)
@@ -123,7 +88,7 @@ def experiment(bootstrap=False, baseline=False, n_step=5, gamma=.99, lr=1e-3, et
 
 
 def main():
-    experiment(bootstrap=False, baseline=False, n_step=5, gamma=.99, lr=1e-3, eta=.1)
+    experiment(bootstrap=True, baseline=True, n_step=5, gamma=.99, lr=1e-3, eta=.1)
 
 if __name__ == '__main__':
     main()

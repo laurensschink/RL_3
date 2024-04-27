@@ -14,7 +14,7 @@ class Policy(nn.Module):
     def __init__(self,action_space,observation_space):
         super(Policy, self).__init__()
         self.lin1= nn.Linear(observation_space, 128)
-        self.dropout = nn.Dropout(p=0.6)
+        self.dropout = nn.Dropout(p=0.3)
         self.lin2 = nn.Linear(128, action_space)
 
     def forward(self, x):
@@ -22,7 +22,9 @@ class Policy(nn.Module):
         x = self.dropout(x)
         x = F.relu(x)
         action_scores = self.lin2(x)
-        return F.softmax(action_scores, dim=1)
+        probs = F.softmax(action_scores, dim=1)
+        distr  = Categorical(probs)       
+        return distr
 
 class Reinforce():
     def __init__(self,n_actions,n_observations,gamma,lr=1e-3,eta=1e-3):
@@ -31,17 +33,17 @@ class Reinforce():
         self.policy = Policy(n_actions,n_observations)
         self.optimizer = optim.Adam(self.policy.parameters(), lr=lr)
         self.eps = np.finfo(np.float32).eps.item()
+        self.states = []
         self.saved_log_probs = []
-        self.entropies = []
         self.rewards = []
+        self.entropies = []
 
     def select_action(self,state):
 #        state = torch.from_numpy(state).float().unsqueeze(0)
-        probs = self.policy(state)
-        m = Categorical(probs)
-        action = m.sample()
-        self.entropies.append(m.entropy())
-        self.saved_log_probs.append(m.log_prob(action))
+        distr = self.policy(state)
+        action = distr.sample()
+        self.entropies.append(distr.entropy().mean())
+        self.saved_log_probs.append(distr.log_prob(action))
         return action.item()
 
     def update_policy(self):
