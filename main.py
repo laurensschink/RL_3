@@ -42,8 +42,8 @@ def experiment(bootstrap=False, baseline=False, n_step=5, gamma=.99, lr=1e-3, et
     observation_space = env.observation_space.shape[0]
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    agent = Reinforce(n_actions=action_space,n_observations=observation_space,gamma=gamma, lr=lr, eta=eta)
-#    agent = Ac3(n_actions=action_space,n_observations=observation_space,bootstrap=True, baseline=True, gamma=gamma, lr=lr, eta=eta)
+#    agent = Reinforce(n_actions=action_space,n_observations=observation_space,gamma=gamma, lr=lr, eta=eta)
+    agent = Ac3(n_actions=action_space,n_observations=observation_space,bootstrap=True, baseline=True, gamma=gamma, lr=lr, eta=eta)
     running_reward = -500
 
     episode_rewards = []

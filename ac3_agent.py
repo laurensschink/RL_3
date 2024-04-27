@@ -89,7 +89,7 @@ class Ac3():
                 else:
                     value = self.q_value(self.states[i+n_step])
                 n_state_value = (self.gamma**n_step) * value
-                R = reward + torch.stack([(self.gamma**n) * self.rewards[i+n] for n in range(n_step)]).sum() + n_state_value
+                R = reward + torch.stack([(self.gamma**n) * torch.tensor(self.rewards[i+n]) for n in range(n_step)]).sum() + n_state_value
             else:
                 R = reward + self.gamma * R
             rewards.appendleft(R)
