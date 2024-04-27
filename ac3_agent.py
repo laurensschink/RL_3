@@ -1,4 +1,4 @@
-
+ 
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -63,14 +63,14 @@ class Ac3():
             R = reward + self.gamma * R
             rewards.appendleft(R)
         rewards = torch.tensor(rewards)
-        entropy = self.calculate_entropy()
+#        entropy = self.calculate_entropy()
         for log_prob, R in zip(self.saved_log_probs, rewards):
             if value_func==None:
                 #Pure REINFORCE policy update
-                policy_loss.append(-log_prob * R + entropy)
+                policy_loss.append(-log_prob * R + self.eta * log_prob * torch.exp(log_prob))
             else:
                 #Update policy with value function
-                policy_loss.append(-log_prob*value_func + entropy)
+                policy_loss.append(-log_prob*value_func + self.eta * log_prob * torch.exp(log_prob))
         
         policy_loss = torch.cat(policy_loss).sum()
         policy_loss.backward()

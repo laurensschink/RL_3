@@ -11,11 +11,11 @@ import matplotlib.pyplot as plt
 
 # import agents
 from reinforce_agent import Reinforce
-from ac3_agent import Ac3
+from ac3_agent import Ac3, Policy
 
 
 
-def experiment(bootstrap=True, baseline=True, n_step=5, gamma=.99, lr=1e-3, eta=.1):
+def experiment(bootstrap=False, baseline=False, n_step=5, gamma=.99, lr=1e-3, eta=.1):
     """
     Main function to run a policy-based deep reinforcement learning run on the acrobot environment.
     Acrobot is relatively reward-scarce, only gains any reward when reaching goal.
@@ -43,7 +43,9 @@ def experiment(bootstrap=True, baseline=True, n_step=5, gamma=.99, lr=1e-3, eta=
     running_reward = -100
     if bootstrap or baseline:
         value_function = Policy(observation_space, 1, output_activation=nn.ReLU()).to(device)
-        value_agent = Agent(value_function, gamma=gamma, lr=lr, eta=eta)
+        value_agent = Ac3( n_actions=action_space,n_observations=observation_space, gamma=gamma, lr=lr, eta=eta)
+        value_agent.policy = value_function
+
 
     episode_rewards = []
     for i_episode in count(1):
@@ -63,7 +65,7 @@ def experiment(bootstrap=True, baseline=True, n_step=5, gamma=.99, lr=1e-3, eta=
                 T = t
                 break
             if done:
-                print('Goal reached!')
+#                print('Goal reached!')
                 T = t
                 break
 

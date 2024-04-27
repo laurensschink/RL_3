@@ -50,7 +50,7 @@ class Policy(nn.Module):
         return F.softmax(action_scores, dim=1)
 
 
-policy = Policy()
+policy = Policy(action_space,observation_space)
 optimizer = optim.Adam(policy.parameters(), lr=1e-2)
 eps = np.finfo(np.float32).eps.item()
 
@@ -85,7 +85,7 @@ def finish_episode():
 
 def main():
     running_reward = 10
-    for i_episode in count(1):
+    for i_episode in range(3):#count(1):
         state, _ = env.reset()
         ep_reward = 0
         for t in range(1, 10000):  # Don't infinite loop while learning
