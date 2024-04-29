@@ -22,8 +22,8 @@ class Policy(nn.Module):
         x = F.relu(x)
         action_scores = self.lin2(x)
         probs = F.softmax(action_scores, dim=1)
-        distr  = Categorical(probs)       
-        return distr
+          
+        return probs
 
 class Reinforce():
     def __init__(self,n_actions,n_observations,gamma, lr=1e-3,
@@ -40,7 +40,8 @@ class Reinforce():
 
     def select_action(self,state):
 #        state = torch.from_numpy(state).float().unsqueeze(0)
-        distr = self.policy(state)
+        probs = self.policy(state)
+        distr  = Categorical(probs)     
         action = distr.sample()
         self.entropies.append(distr.entropy().mean())
         self.saved_log_probs.append(distr.log_prob(action))
@@ -67,7 +68,7 @@ class Reinforce():
     
     def exploit(self, state):
         with torch.no_grad():
-            distr = self.policy(state)
-            return torch.argmax(distr).item()
+            probs = self.policy(state)
+            return torch.argmax(probs).item()
         
 
