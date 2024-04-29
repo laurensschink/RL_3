@@ -1,4 +1,3 @@
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -11,11 +10,11 @@ from collections import deque
 # make hyper parameters configurable
 
 class Policy(nn.Module):
-    def __init__(self,action_space,observation_space):
+    def __init__(self,action_space,observation_space, hidden_nodes, dropout):
         super(Policy, self).__init__()
-        self.lin1= nn.Linear(observation_space, 128)
-        self.dropout = nn.Dropout(p=0.3)
-        self.lin2 = nn.Linear(128, action_space)
+        self.lin1= nn.Linear(observation_space, hidden_nodes)
+        self.dropout = nn.Dropout(p=dropout)
+        self.lin2 = nn.Linear(hidden_nodes, action_space)
 
     def forward(self, x):
         x = self.lin1(x)
@@ -27,10 +26,11 @@ class Policy(nn.Module):
         return distr
 
 class Reinforce():
-    def __init__(self,n_actions,n_observations,gamma,lr=1e-3,eta=1e-3):
+    def __init__(self,n_actions,n_observations,gamma, lr=1e-3,
+                eta=1e-3, hidden_nodes = 32, dropout = 0.3):
         self.eta = eta
         self.gamma = gamma
-        self.policy = Policy(n_actions,n_observations)
+        self.policy = Policy(n_actions,n_observations, hidden_nodes,dropout)
         self.optimizer = optim.Adam(self.policy.parameters(), lr=lr)
         self.eps = np.finfo(np.float32).eps.item()
         self.states = []
@@ -64,4 +64,10 @@ class Reinforce():
         self.optimizer.step()
         del self.rewards[:]
         del self.saved_log_probs[:]
+    
+    def exploit(self, state):
+        with torch.no_grad():
+            distr = self.policy(state)
+            return torch.argmax(distr).item()
+        
 
