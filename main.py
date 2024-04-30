@@ -19,6 +19,7 @@ def smooth(y, window, poly=2):
     #Helper function to smooth loss functions
     return savgol_filter(y, window, poly)
 
+torch.autograd.set_detect_anomaly(True)
 
 def experiment(bootstrap=False, baseline=False, n_step=5, gamma=.99, lr=1e-3, eta=.1, dropout=0.3, ):
     """
@@ -89,7 +90,8 @@ def experiment(bootstrap=False, baseline=False, n_step=5, gamma=.99, lr=1e-3, et
 
 
 def main():
-    hyper_search_reinforce(50)
+    #hyper_search_reinforce(50)
+    experiment()
 
 def hyper_search_reinforce(nr_searches):
     """hyperparameter search for the reinforce agent to find optimal the configuration.
@@ -135,6 +137,7 @@ def hyper_search_reinforce(nr_searches):
                         dropout= dropout)
 #        for i_episode in count(1):
         for i_episode in tqdm(range(1,max_eps)):
+            print(i_episode)
             state, _ = env.reset()
             ep_reward = 0 
             for t in range(1, 10000):  # learning loop
