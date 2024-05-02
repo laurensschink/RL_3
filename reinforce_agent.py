@@ -5,9 +5,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 from collections import deque
-# Test for bugs (will be plenty of errors to iron out)
-# add entropy regularization
-# make hyper parameters configurable
+
 
 class Policy(nn.Module):
     def __init__(self,action_space,observation_space, hidden_nodes, dropout):
@@ -72,3 +70,63 @@ class Reinforce():
             return torch.argmax(probs).item()
         
 
+def experiment(gamma=.99, lr=1e-3, eta=.1, hidden_nodes=32, dropout=0.3,max_eps=801):
+    """
+    Main function to run a policy-based deep reinforcement learning run on the acrobot environment.
+    Acrobot is relatively reward-scarce, only gains any reward when reaching goal.
+    It also terminates as soon as the goal is reached.
+    Aim is therefore to reach the goal as quickly and consitently as possible.
+
+    parameters:
+    bootstrap (bool): Turns actor-critic n-step bootstrapping on
+    baseline (bool): Turns actor critic baseline substraction on
+    n_step (int): number of steps for n-step bootstrapping
+    gamma (float): discount parameter
+    lr (float): learning rate
+    eta (float): entropy factor
+    """
+    env = gym.make('Acrobot-v1')
+    eval_env = gym.make('Acrobot-v1')
+    eval_rate = 25
+    action_space = env.action_space.n
+    observation_space = env.observation_space.shape[0]
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    agent = Reinforce(action_space,observation_space,gamma, lr=lr,
+                        eta=eta, hidden_nodes = hidden_nodes, dropout = dropout)
+
+    train_rewards, train_losses, eval_rewards = list(),list(),list()
+    for _ in range(10):
+        run_rewards,run_losses, = list(),list()
+        run_eval_rewards = {}
+        for i_episode in count(1):
+            state, _ = env.reset()
+            ep_reward = 0
+            for t in range(1, 10000):  
+                state = torch.from_numpy(state).float().unsqueeze(0)
+                action = agent.select_action(state)
+                state, reward, done, truncated, _ = env.step(action)
+                agent.rewards.append(reward)
+                ep_reward += reward
+                if done or truncated:
+                    break
+            agent.update_policy()
+            if i_episode % eval_rate == 0:    # evaluate learning progress
+                eval_list = []
+                agent.policy.eval()
+                for i in range(10):
+                    eval_reward = 0
+                    state, _ = eval_env.reset()
+                    while True:
+                        state = torch.from_numpy(state).float().unsqueeze(0)
+                        action = agent.exploit(state)
+                        state, reward, done, truncated, _ = eval_env.step(action)
+                        eval_reward+= reward
+                        if done or truncated:
+                            eval_list.append(eval_reward)
+                            break
+                run_eval_rewards[i_episode] = np.mean(eval_list)
+                agent.policy.train()     
+            run_rewards.append(ep_reward)
+            if (i_episode>max_eps):
+                break

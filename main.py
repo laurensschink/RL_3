@@ -13,14 +13,14 @@ import matplotlib.pyplot as plt
 
 # import agents
 from reinforce_agent import Reinforce
-from ac3_agent import Ac3, Policy
+
 
 def smooth(y, window, poly=2):
     #Helper function to smooth loss functions
     return savgol_filter(y, window, poly)
 
 
-def experiment(bootstrap=False, baseline=False, n_step=5, gamma=.99, lr=1e-3, eta=.1, dropout=0.3, ):
+def experiment(gamma=.99, lr=1e-3, eta=.1, dropout=0.3):
     """
     Main function to run a policy-based deep reinforcement learning run on the acrobot environment.
     Acrobot is relatively reward-scarce, only gains any reward when reaching goal.
@@ -43,8 +43,7 @@ def experiment(bootstrap=False, baseline=False, n_step=5, gamma=.99, lr=1e-3, et
     observation_space = env.observation_space.shape[0]
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-#    agent = Reinforce(n_actions=action_space,n_observations=observation_space,gamma=gamma, lr=lr, eta=eta)
-    agent = Ac3(n_actions=action_space,n_observations=observation_space,bootstrap=True, baseline=True, gamma=gamma, lr=lr, eta=eta)
+    agent = Reinforce(n_actions=action_space,n_observations=observation_space,gamma=gamma, lr=lr, eta=eta)
     running_reward = -500
 
     episode_rewards = []
