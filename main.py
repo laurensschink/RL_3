@@ -13,7 +13,24 @@ import matplotlib.pyplot as plt
 from reinforce_agent import Reinforce
 from ac3_agent import Ac3, Policy
 
+from scipy.signal import savgol_filter
 
+
+def smooth(y, window, poly=2):
+    #Helper function to smooth loss functions
+    return savgol_filter(y, window, poly)
+
+def plot_gradient_variance(grad_log):
+    #get variance
+    variances = [np.var(g) for g in grad_log] 
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(variances, label='gradient variance')
+    plt.xlabel('timestep')
+    plt.ylabel('Mean variance')
+    plt.title('variance of gradients for reinforce')
+    plt.legend()
+    plt.show()
 
 def experiment(bootstrap=False, baseline=False, n_step=5, gamma=.99, lr=1e-3, eta=.1):
     """
@@ -33,13 +50,13 @@ def experiment(bootstrap=False, baseline=False, n_step=5, gamma=.99, lr=1e-3, et
     env = gym.make('Acrobot-v1')
     eval_env = gym.make('Acrobot-v1',render_mode='human')
 
-    max_eps = 2000
+    max_eps = 200
     action_space = env.action_space.n
     observation_space = env.observation_space.shape[0]
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     agent = Reinforce(n_actions=action_space,n_observations=observation_space,gamma=gamma, lr=lr, eta=eta)
-    agent = Ac3(n_actions=action_space,n_observations=observation_space,gamma=gamma, lr=lr, eta=eta)
+    # agent = Ac3(n_actions=action_space,n_observations=observation_space,gamma=gamma, lr=lr, eta=eta)
     running_reward = -100
     if bootstrap or baseline:
         value_function = Policy(observation_space, 1, output_activation=nn.ReLU()).to(device)
@@ -104,6 +121,12 @@ def experiment(bootstrap=False, baseline=False, n_step=5, gamma=.99, lr=1e-3, et
         if i_episode % 10 == 0:
             print('Episode {}\tLast reward: {:.2f}\tAverage reward: {:.2f}'.format(
                   i_episode, ep_reward, running_reward))
+            
+        if i_episode % 100 == 0:
+            # grads = agent.get_gradients()
+            plot_gradient_variance(agent.get_gradients())
+            # agent.reset_gradients()   
+                     
         if (i_episode>max_eps):
             print("Max number of episodes reached! Running reward is now {} and "
                   "the last episode runs to {} time steps!".format(running_reward, t))
