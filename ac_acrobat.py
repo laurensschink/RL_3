@@ -49,9 +49,12 @@ def compute_entropy(probs):
 
 # also seperate optimizers for both nns
 def train(env, actor, critic, actor_optimizer, critic_optimizer, 
-        baseline = True, bootstrap = False, 
-        initial_entropy_weight=0.01, n_step=5, gamma=0.99, num_episodes=500,eval_rate = 100):
+        baseline = False, bootstrap = False, 
+        initial_entropy_weight=0.01, n_step=5, gamma=0.99, num_episodes=2000,eval_rate = 100):
 
+    # track gradients
+    actor_grad_log = []
+    critic_grad_log = []
     
     eval_rate = 100
     num_episodes = num_episodes
@@ -155,19 +158,34 @@ def train(env, actor, critic, actor_optimizer, critic_optimizer,
             actor_loss = -torch.sum(torch.stack(log_probs) * advantages) - entropy_weight * torch.sum(torch.stack(entropies))
         else:
             actor_loss = -torch.sum(torch.stack(log_probs) * returns) - entropy_weight * torch.sum(torch.stack(entropies))
+        
         #calculate MSE between the critic's values and the returns
         critic_loss = nn.MSELoss()(torch.stack(values).squeeze(), returns) # use .stack().squeeze() for error
-        
+
         #backprop
         total_loss = actor_loss + critic_loss
-        total_loss.backward()
+        total_loss.backward(retain_graph=True)
         
+        actor_grads = []
+        critic_grads = []
+        
+        for param in actor.parameters():
+            if param.grad is not None:
+                actor_grads.append(param.grad.view(-1).detach().cpu().numpy()**2)
+        actor_grad_log.append(np.concatenate(actor_grads))
+        
+        for param in critic.parameters():
+            if param.grad is not None:
+                critic_grads.append(param.grad.view(-1).detach().cpu().numpy()**2)
+        critic_grad_log.append(np.concatenate(critic_grads))    
+        
+
         actor_optimizer.step()
         critic_optimizer.step()
 
         rewards_per_episode.append(np.sum(rewards))
         loss_over_episodes.append(total_loss.item())
-    return rewards_per_episode, loss_over_episodes, eval_rewards
+    return actor_grad_log, critic_grad_log, rewards_per_episode, loss_over_episodes, eval_rewards
 
 
 def experiment(hidden_nodes, eta, lr, baseline, bootstrap, n_step,gamma,max_eps=801):
@@ -237,11 +255,51 @@ def hyper_search_ac3(nr_searches = 100):
         with open(os.path.join('results','grid_search_ac3.pickle'), 'wb') as f:
             pickle.dump(summaries, f)
 
+    
+def plot_gradient_variance(grad_logs, title="gradient variance for actor & critic"):
+    fig, ax1 = plt.subplots(figsize=(10, 5))
+
+    # plot on two axes
+    color = 'tab:blue'
+    ax1.set_xlabel('episode')
+    ax1.set_ylabel('actor variance', color=color)
+    ax1.plot([np.var(g) for g in grad_logs['Actor']], color=color)
+    ax1.tick_params(axis='y', labelcolor=color)
+
+
+    ax2 = ax1.twinx()  
+    color = 'tab:orange'
+    ax2.set_ylabel('critic variance', color=color)
+    ax2.plot([np.var(g) for g in grad_logs['Critic']], color=color)
+    ax2.tick_params(axis='y', labelcolor=color)
+
+    plt.title(title)
+    fig.tight_layout()
+    plt.show()
 
 def main():
 
-    hyper_search_ac3(100)
-    #experiment()
+    # hyper_search_ac3(100)
+    # experiment()
+    
+    env = gym.make("Acrobot-v1")
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.n
+
+    actor = Actor(state_dim, action_dim)
+    critic = Critic(state_dim)
+    actor_optimizer = optim.AdamW(actor.parameters(), lr=0.001)
+    critic_optimizer = optim.AdamW(critic.parameters(), lr=0.001)
+    
+    actor_grad_log, critic_grad_log, _, _, _ = train(env, actor, critic, actor_optimizer, critic_optimizer,False,False)
+    # print ("actor_grads ", actor_grad_log)
+    # print("critic_grads ", critic_grad_log)
+    combined_logs = {
+        "Actor": actor_grad_log,
+        "Critic": critic_grad_log
+    }
+    
+    plot_gradient_variance(combined_logs)
 
 if __name__ == '__main__':
     main()
