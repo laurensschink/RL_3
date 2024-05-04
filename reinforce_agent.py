@@ -35,6 +35,7 @@ class Reinforce():
         self.saved_log_probs = []
         self.rewards = []
         self.entropies = []
+        self.grad_log = []
 
     def select_action(self,state):
 #        state = torch.from_numpy(state).float().unsqueeze(0)
@@ -61,13 +62,30 @@ class Reinforce():
         policy_loss = torch.cat(policy_loss).sum() 
         policy_loss.backward()
         self.optimizer.step()
-        del self.rewards[:]
+        
+        # store gradients
+        grads = []
+        for param in self.policy.parameters():
+            if param.grad is not None:
+                grads.append(param.grad.view(-1).detach().cpu().numpy()**2) # get squared grads https://discuss.pytorch.org/t/should-it-really-be-necessary-to-do-var-detach-cpu-numpy/35489
+        self.grad_log.append(np.concatenate(grads))
+
+        del self.entropies[:]
         del self.saved_log_probs[:]
+        del self.rewards[:]
     
     def exploit(self, state):
         with torch.no_grad():
             probs = self.policy(state)
             return torch.argmax(probs).item()
+    
+    
+    # extra functions for the gradient plot
+    def get_gradients(self):
+        return self.grad_log
+
+    def reset_gradients(self):
+        self.grad_log = []
         
 
 def experiment(gamma=.99, lr=1e-3, eta=.1, hidden_nodes=32, dropout=0.3,max_eps=801):

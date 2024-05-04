@@ -19,6 +19,18 @@ def smooth(y, window, poly=2):
     #Helper function to smooth loss functions
     return savgol_filter(y, window, poly)
 
+def plot_gradient_variance(grad_log):
+    #get variance
+    variances = [np.var(g) for g in grad_log] 
+
+    plt.figure(figsize=(10, 5))
+    plt.plot(variances, label='gradient variance')
+    plt.xlabel('timestep')
+    plt.ylabel('Mean variance')
+    plt.title('variance of gradients for reinforce')
+    plt.legend()
+    plt.show()
+
 torch.autograd.set_detect_anomaly(True)
 
 def experiment(gamma=.99, lr=1e-3, eta=.1, dropout=0.3):
@@ -39,7 +51,7 @@ def experiment(gamma=.99, lr=1e-3, eta=.1, dropout=0.3):
     env = gym.make('Acrobot-v1')
     eval_env = gym.make('Acrobot-v1',render_mode='human')
 
-    max_eps = 2000
+    max_eps = 500
     action_space = env.action_space.n
     observation_space = env.observation_space.shape[0]
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -75,7 +87,8 @@ def experiment(gamma=.99, lr=1e-3, eta=.1, dropout=0.3):
                   "the last episode runs to {} time steps!".format(running_reward, t))
             break
 
-
+    plot_gradient_variance(agent.get_gradients())
+    
     #Plot results
     episode_rewards = smooth(episode_rewards, 3)
     eps = range(i_episode)
