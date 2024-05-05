@@ -7,6 +7,7 @@ from scipy.stats import gaussian_kde
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
 from itertools import product
+import json
 
 def smooth(y, window, poly=2):
     #Helper function to smooth loss functions
@@ -15,9 +16,9 @@ def smooth(y, window, poly=2):
 def load_results(result_path = 'results'):
     # Load results from experiment from disk,
     # prepare data for presentation 
-    with open('RL_3/results/grid_search_ac3.pickle','rb') as f:
+    with open(os.path.join("results",'grid_search_ac3.pickle'),'rb') as f:
         results_ac = pickle.load(f)
-    with open('RL_3/results/vary_eta.pickle', 'rb') as f:
+    with open(os.path.join("results", "vary_eta.pickle"), 'rb') as f:
         eta_dict = pickle.load(f)
 
     df_ac = pd.DataFrame().from_dict(results_ac)
@@ -27,9 +28,41 @@ def load_results(result_path = 'results'):
     df_ac['label'] = df_ac['expansions'].map({0:'none',1:'baseline',2:'bootstrap',3:'both'})
     return df_ac,eta_dict
    
+def get_config_title(file_name):
+    if file_name == 'results_config_True_True.json':
+        return "Baseline + Bootstrap"
+    elif file_name == 'results_config_True_False.json':
+        return "Baseline"
+    elif file_name == 'results_config_False_True.json':
+        return "Bootstrap"
+    else:
+        return "REINFORCE"
+    
+def plot_subplots(file_names):
+    num_configs = len(file_names)
+    fig, axes = plt.subplots(2, 2, figsize=(15, 8))
+    
+    for i, file_name in enumerate(file_names):
+        with open(os.path.join("results", file_name), 'r') as f:
+            data = json.load(f)
+            avg_variances = data["avg_variances"]
+        
+        config_info = file_name.split('_')[-2:]
+        print(file_name)
+        config_title = get_config_title(file_name)
+        ax = axes[i // 2, i % 2]
+        ax.plot(avg_variances)
+        ax.set_xlabel('episode')
+        ax.set_ylabel('mean variance')
+        ax.set_title(f'Gradient variance - {config_title}')
+        
+    plt.tight_layout()
+    plt.show()
+    
 def main():
     # Function to create the graphs and table used in the report.
     df_ac,eta_dict = load_results()
+    print(df_ac)
 
     # create table with top perfroming algorithm configurations
     report_cols = ['hidden_nodes', 'eta', 'lr', 'label', 'n_step', 'gamma','avg_reward', 'avg_eval_reward']
@@ -114,6 +147,10 @@ def main():
     plt.suptitle('Effect of entropy regularization', fontsize=20)
     plt.savefig(os.path.join('results','regularization.png'))
     plt.show()
+    
+    # plot variance files
+    file_names = ['results_config_False_False.json', 'results_config_False_True.json', 'results_config_True_False.json', 'results_config_True_True.json']
+    plot_subplots(file_names)
 
 if __name__ == '__main__':
     main()
