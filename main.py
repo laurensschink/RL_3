@@ -65,7 +65,6 @@ studies to generate graphs and tables used in the report")
         regularization_search()
     
     if variance_stud:
-        variance_study()
         variance_study(save_path = 'results')
 
     if proces_results:

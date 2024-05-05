@@ -6,7 +6,6 @@ main.py for running experiments
 reinforce_agent for the reinforce agent
 ac_acrobat for the actor critic agent where bootstrapping & base line subtraction should be optional
 create_graphs for processing results of eta/grid search
-variance_plots plots the variance for the different configurations, seperate notebook
 
 ### Run instructions:
 To run initialize main.py.  
