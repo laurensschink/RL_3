@@ -2,7 +2,6 @@ import argparse, os
 from ac_acrobat import hyperparameter_search, regularization_search, variance_study
 import create_graphs 
 
-
 def main():
     parser = argparse.ArgumentParser(description="Policy based RL")
     parser.add_argument("--grid-search", action="store_true")
@@ -10,7 +9,6 @@ def main():
     parser.add_argument("--variance-study", action="store_true")
     parser.add_argument("--proces-results", action="store_true")
 
-    
     args = parser.parse_args()
 
     print("possible commands:")

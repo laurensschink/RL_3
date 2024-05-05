@@ -4,19 +4,16 @@ import torch, os, pickle
 import torch.nn as nn
 import torch.optim as optim
 from torch.distributions import Categorical
-import matplotlib
+import matplotlib, json
 import matplotlib.pyplot as plt
 from itertools import product
 
 
-#### Search parameters:
-# basline, bootstrap, eta, lr
-# hidden layer,
-# n_step
-# optimizer?
+# Actor-critic implementation
 
-# simple, seperate actor-critic nns
+
 class Actor(nn.Module):
+    # Neural network for action selection
     def __init__(self, state_dim, action_dim, hiddden_nodes=32):
         super(Actor, self).__init__()
         self.network = nn.Sequential(
@@ -31,6 +28,7 @@ class Actor(nn.Module):
         return action_probs
 
 class Critic(nn.Module):
+    # Neural network for state value estimation
     def __init__(self, state_dim, hiddden_nodes=32):
         super(Critic, self).__init__()
         self.network = nn.Sequential(
@@ -43,14 +41,16 @@ class Critic(nn.Module):
         value = self.network(state)
         return value
 
-# new entropy calculation 
 def compute_entropy(probs):
+    # Function to calculate entropy of the probability distribution over
+    # possible actions.
     return -torch.sum(probs * torch.log(probs + 1e-6), dim=1)
 
-# also seperate optimizers for both nns
+
 def train(env, actor, critic, actor_optimizer, critic_optimizer, 
         baseline = False, bootstrap = False, 
         initial_entropy_weight=0.01, n_step=5, gamma=0.99, num_episodes=2000,eval_rate = 100):
+    # Train cyle for the actor critic algorithm. 
 
     print ("baseline ",baseline)
     print ("bootstrap ",bootstrap)
@@ -58,7 +58,7 @@ def train(env, actor, critic, actor_optimizer, critic_optimizer,
     actor_grad_log = []
     critic_grad_log = []
     
-    eval_rate = 100
+    eval_rate = eval_rate
     num_episodes = num_episodes
     final_entropy_weight = initial_entropy_weight/100
     loss_over_episodes = []
@@ -74,17 +74,18 @@ def train(env, actor, critic, actor_optimizer, critic_optimizer,
                 while True:
                     state = torch.from_numpy(state).float().unsqueeze(0)
                     probs = actor(state)
-                    action = torch.argmax(probs).item()
+                    action = torch.argmax(probs).item()  # greedy action selection
                     state, reward, done, truncated, _ = env.step(action)
                     eval_reward+= reward
                     if done or truncated:
                         eval_list.append(eval_reward)
                         break
                 eval_rewards[episode] = np.mean(eval_list)
-        # should find out if this is enough learning episodes, and if 0.1 is high enough
+
+        # Entropy decay
         entropy_weight = max(initial_entropy_weight - (initial_entropy_weight - final_entropy_weight) * (episode / 300), final_entropy_weight) # decrease to 0.001 in the first 300 epsiodes
 
-        # init the environment, init lists
+        # Init the environment, init lists
         state,_ = env.reset()
         state = torch.from_numpy(state).float().unsqueeze(0)
         log_probs = []
@@ -93,14 +94,13 @@ def train(env, actor, critic, actor_optimizer, critic_optimizer,
         entropies = []
         states = [state]
         
-        # done = False
         for t in range(1,10000):
             # sample an action
             probs = actor(state)
             dist = Categorical(probs)
             action = dist.sample()
             
-            #get logbprob & entropy
+            # get logbprob & entropy
             log_prob = dist.log_prob(action)
             entropy = compute_entropy(probs)
             
@@ -128,7 +128,8 @@ def train(env, actor, critic, actor_optimizer, critic_optimizer,
         G = 0
 
         # reversely calculate returns and advantages from the episode
-        if bootstrap: # added bootstrap
+        if bootstrap:
+            # use bootstrap for state value calculation
             for t,reward in enumerate(rewards):
                 n_step_t = min(n_step,len(rewards)-t)
                 if t+n_step_t == len(rewards):
@@ -143,6 +144,7 @@ def train(env, actor, critic, actor_optimizer, critic_optimizer,
             advantages = torch.tensor(advantages, dtype=torch.float32)
 
         else:
+            # use tradition bellman equation for state value calculation
             for t in reversed(range(len(rewards))):
                 G = rewards[t] + gamma * G
                 returns.append(G)
@@ -150,15 +152,16 @@ def train(env, actor, critic, actor_optimizer, critic_optimizer,
             returns = torch.tensor(returns, dtype=torch.float32).flip(dims=(0,))
             advantages = torch.tensor(advantages, dtype=torch.float32).flip(dims=(0,))
         
-        # updating netwiorks
+        # updating networks
         # set grads to zero
         actor_optimizer.zero_grad()
         critic_optimizer.zero_grad()
         
-        # policy_loss.append(-log_prob * advantage + entropy_loss)
         if baseline:
+            # Use advantage for loss function
             actor_loss = -torch.sum(torch.stack(log_probs) * advantages) - entropy_weight * torch.sum(torch.stack(entropies))
         else:
+            # use normal actor loss
             actor_loss = -torch.sum(torch.stack(log_probs) * returns) - entropy_weight * torch.sum(torch.stack(entropies))
         
         #calculate MSE between the critic's values and the returns
@@ -192,6 +195,7 @@ def train(env, actor, critic, actor_optimizer, critic_optimizer,
 
 
 def experiment(hidden_nodes, eta, lr, baseline, bootstrap, n_step,gamma,max_eps=801):
+    # Repeat a training cycle 10 times for the same parameters
     env = gym.make("Acrobot-v1")
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.n
@@ -210,6 +214,8 @@ def experiment(hidden_nodes, eta, lr, baseline, bootstrap, n_step,gamma,max_eps=
 
 
 def hyperparameter_search(nr_searches = 100,save_path = 'results'):
+    # perform hyperparameter search over the defined search space 
+    # and save results to disk for later analysis.
     env = gym.make("Acrobot-v1")
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.n
@@ -255,30 +261,29 @@ def hyperparameter_search(nr_searches = 100,save_path = 'results'):
         summaries.append(param_dict)
         print(f'run {c} - {nr_searches} completed.')
         print(f'mean reward: {param_dict["avg_reward"]:.2f}, mean eval: {param_dict["avg_eval_reward"]:.2f}')
-        with open(os.path.join('results','grid_search_ac3_2.pickle'), 'wb') as f:
+        with open(os.path.join('results','grid_search_ac3.pickle'), 'wb') as f:
             pickle.dump(summaries, f)
+    print('Search done. Result saved as results/grid_search_ac3.pickle')
 
 def regularization_search(save_path='results'):
+    # For the given parameters, train the actor critic algorithm
+    # 5 times for different values of eta, to be able to visualize
+    # the impact of entropy regularization.
+
     env = gym.make("Acrobot-v1")
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.n
-
-    max_eps = 801
 
     combinations = {(False,True) :{'hidden_nodes':64,'lr':0.0001,'n_step':3},
                     (False,False):{'hidden_nodes':64,'lr':0.001, 'n_step':3},
                     (True,False) :{'hidden_nodes':32,'lr':0.001, 'n_step':3},
                     (True,True)  :{'hidden_nodes':16,'lr':0.01,  'n_step':5}}
-
-#    etas = [0.05 , 0.01 , 0.1  , 1.   , 0.005]
-    etas = [0]
-#    results = {key:{eta:{'rewards':[],'eval_rewards':[]} for eta in etas} for key in combinations.keys()}
-    with open(os.path.join('results','vary_eta.pickle'), 'rb') as f:
-        results = pickle.load(f)
-    for combo in combinations.keys():
-        results[combo][0] = {'rewards':[],'eval_rewards':[]}
+    max_eps = 801
     gamma = .99
+    etas = [0.05 , 0.01 , 0.1  , 1.   , 0.005]
     
+    results = {key:{eta:{'rewards':[],'eval_rewards':[]} for eta in etas} for key in combinations.keys()}
+ 
     for baseline, bootstrap in combinations.keys():
         param_dict = combinations[(baseline, bootstrap)]
         hidden_nodes = int(param_dict['hidden_nodes'])
@@ -300,9 +305,9 @@ def regularization_search(save_path='results'):
             with open(os.path.join(save_path,'vary_eta.pickle'), 'wb') as f:
                 pickle.dump(results, f)
 
-import json
-
 def variance_study():
+    # Track weigth updates to quantify and visualize the variance
+    # during algorithm optimization. 
     
     env = gym.make("Acrobot-v1")
     state_dim = env.observation_space.shape[0]
@@ -341,48 +346,6 @@ def variance_study():
         file_name = f"results_config_{config['baseline']}_{config['bootstrap']}.json"
         with open(file_name, 'w') as f:
             json.dump({"avg_variances": avg_variances.tolist()}, f)
-
-def vary_eta():
-    env = gym.make("Acrobot-v1")
-    state_dim = env.observation_space.shape[0]
-    action_dim = env.action_space.n
-
-    max_eps = 801
-
-    combinations = {(False,True) :{'hidden_nodes':64,'lr':0.0001,'n_step':3},
-                    (False,False):{'hidden_nodes':64,'lr':0.001, 'n_step':3},
-                    (True,False) :{'hidden_nodes':32,'lr':0.001, 'n_step':3},
-                    (True,True)  :{'hidden_nodes':16,'lr':0.01,  'n_step':5}}
-
-#    etas = [0.05 , 0.01 , 0.1  , 1.   , 0.005]
-    etas = [0]
-#    results = {key:{eta:{'rewards':[],'eval_rewards':[]} for eta in etas} for key in combinations.keys()}
-    with open(os.path.join('results','vary_eta.pickle'), 'rb') as f:
-        results = pickle.load(f)
-    for combo in combinations.keys():
-        results[combo][0] = {'rewards':[],'eval_rewards':[]}
-    gamma = .99
-    
-    for baseline, bootstrap in combinations.keys():
-        param_dict = combinations[(baseline, bootstrap)]
-        hidden_nodes = int(param_dict['hidden_nodes'])
-        lr = param_dict['lr']
-        n_step = param_dict['n_step']
-        
-        for i,eta in product(range(5),etas):
-            print(f'Combination {baseline, bootstrap}, eta: {eta}, run {i+1}-5')
-            actor = Actor(state_dim, action_dim,hidden_nodes)
-            critic = Critic(state_dim, hidden_nodes)
-            actor_optimizer = optim.Adam(actor.parameters(), lr=lr)
-            critic_optimizer = optim.Adam(critic.parameters(), lr=lr)
-
-            episode_rewards, losses, eval_rewards= train(env, actor, critic, actor_optimizer, critic_optimizer, baseline, bootstrap,
-                    initial_entropy_weight=eta, n_step=n_step,  gamma=gamma,  num_episodes=max_eps)
-            results[baseline, bootstrap][eta]['rewards'].append(episode_rewards)
-            results[baseline, bootstrap][eta]['eval_rewards'].append(eval_rewards)
-
-            with open(os.path.join('results','vary_eta.pickle'), 'wb') as f:
-                pickle.dump(results, f)
 
 def main():
     variance_study()

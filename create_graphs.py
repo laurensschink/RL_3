@@ -13,6 +13,8 @@ def smooth(y, window, poly=2):
     return savgol_filter(y, window, poly)
 
 def load_results(result_path = 'results'):
+    # Load results from experiment from disk,
+    # prepare data for presentation 
     with open('RL_3/results/grid_search_ac3.pickle','rb') as f:
         results_ac = pickle.load(f)
     with open('RL_3/results/vary_eta.pickle', 'rb') as f:
@@ -26,6 +28,7 @@ def load_results(result_path = 'results'):
     return results_ac,eta_dict
    
 def main():
+    # Function to create the graphs and table used in the report.
     results_ac,eta_dict = load_results()
 
     # create table with top perfroming algorithm configurations
