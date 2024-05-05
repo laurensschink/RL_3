@@ -25,11 +25,11 @@ def load_results(result_path = 'results'):
     df_ac.loc[df_ac.baseline, 'expansions'] += 1 
     df_ac.loc[df_ac.bootstrap, 'expansions'] += 2 
     df_ac['label'] = df_ac['expansions'].map({0:'none',1:'baseline',2:'bootstrap',3:'both'})
-    return results_ac,eta_dict
+    return df_ac,eta_dict
    
 def main():
     # Function to create the graphs and table used in the report.
-    results_ac,eta_dict = load_results()
+    df_ac,eta_dict = load_results()
 
     # create table with top perfroming algorithm configurations
     report_cols = ['hidden_nodes', 'eta', 'lr', 'label', 'n_step', 'gamma','avg_reward', 'avg_eval_reward']
