@@ -6,7 +6,7 @@ import torch.optim as optim
 from torch.distributions import Categorical
 import matplotlib
 import matplotlib.pyplot as plt
-from itertools import product
+from itertools import product 
 
 
 #### Search parameters:
@@ -206,7 +206,7 @@ def experiment(hidden_nodes, eta, lr, baseline, bootstrap, n_step,gamma,max_eps=
     return {'train_rewards':train_rewards,'train_losses':train_losses,'eval_rewards':eval_rewards}
 
 
-def hyper_search_ac3(nr_searches = 100):
+def hyperparameter_search(nr_searches = 100,save_path = 'results'):
     env = gym.make("Acrobot-v1")
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.n
@@ -252,11 +252,11 @@ def hyper_search_ac3(nr_searches = 100):
         summaries.append(param_dict)
         print(f'run {c} - {nr_searches} completed.')
         print(f'mean reward: {param_dict["avg_reward"]:.2f}, mean eval: {param_dict["avg_eval_reward"]:.2f}')
-        with open(os.path.join('results','grid_search_ac3_2.pickle'), 'wb') as f:
+        with open(os.path.join(save_path,'grid_search_ac3.pickle'), 'wb') as f:
             pickle.dump(summaries, f)
 
     
-def plot_gradient_variance(grad_logs, title="gradient variance for actor & critic"):
+def plot_gradient_variance(grad_logs, title="gradient variance for actor & critic",save_path=None):
     fig, ax1 = plt.subplots(figsize=(10, 5))
 
     # plot on two axes
@@ -272,12 +272,13 @@ def plot_gradient_variance(grad_logs, title="gradient variance for actor & criti
     ax2.set_ylabel('critic variance', color=color)
     ax2.plot([np.var(g) for g in grad_logs['Critic']], color=color)
     ax2.tick_params(axis='y', labelcolor=color)
-
     plt.title(title)
     fig.tight_layout()
+    if save_path:
+        plt.savefig(os.path.join(save_path,'gradient_variance.png'))
     plt.show()
 
-def vary_eta():
+def regularization_search(save_path='results'):
     env = gym.make("Acrobot-v1")
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.n
@@ -316,10 +317,10 @@ def vary_eta():
             results[baseline, bootstrap][eta]['rewards'].append(episode_rewards)
             results[baseline, bootstrap][eta]['eval_rewards'].append(eval_rewards)
 
-            with open(os.path.join('results','vary_eta.pickle'), 'wb') as f:
+            with open(os.path.join(save_path,'vary_eta.pickle'), 'wb') as f:
                 pickle.dump(results, f)
 
-def main():
+def variance_study():
 
     ## hyper_search_ac3(100)
     # experiment()
@@ -342,7 +343,11 @@ def main():
         "Critic": critic_grad_log
     }
     
-    plot_gradient_variance(combined_logs)
+    plot_gradient_variance(combined_logs, save_path = 'results')
+
+
+def main():
+    experiment()
 
 if __name__ == '__main__':
     main()
