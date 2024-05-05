@@ -52,6 +52,8 @@ def train(env, actor, critic, actor_optimizer, critic_optimizer,
         baseline = False, bootstrap = False, 
         initial_entropy_weight=0.01, n_step=5, gamma=0.99, num_episodes=2000,eval_rate = 100):
 
+    print ("baseline ",baseline)
+    print ("bootstrap ",bootstrap)
     # track gradients
     actor_grad_log = []
     critic_grad_log = []
@@ -80,7 +82,7 @@ def train(env, actor, critic, actor_optimizer, critic_optimizer,
                         break
                 eval_rewards[episode] = np.mean(eval_list)
         # should find out if this is enough learning episodes, and if 0.1 is high enough
-        entropy_weight = max(initial_entropy_weight - (initial_entropy_weight - final_entropy_weight) * (episode / 200), final_entropy_weight) # decrease to 0.001 in the first 100 epsiodes
+        entropy_weight = max(initial_entropy_weight - (initial_entropy_weight - final_entropy_weight) * (episode / 300), final_entropy_weight) # decrease to 0.001 in the first 300 epsiodes
 
         # init the environment, init lists
         state,_ = env.reset()
@@ -185,6 +187,7 @@ def train(env, actor, critic, actor_optimizer, critic_optimizer,
 
         rewards_per_episode.append(np.sum(rewards))
         loss_over_episodes.append(total_loss.item())
+    print("\ndone\n")
     return actor_grad_log, critic_grad_log, rewards_per_episode, loss_over_episodes, eval_rewards
 
 
@@ -255,29 +258,6 @@ def hyperparameter_search(nr_searches = 100,save_path = 'results'):
         with open(os.path.join(save_path,'grid_search_ac3.pickle'), 'wb') as f:
             pickle.dump(summaries, f)
 
-    
-def plot_gradient_variance(grad_logs, title="gradient variance for actor & critic",save_path=None):
-    fig, ax1 = plt.subplots(figsize=(10, 5))
-
-    # plot on two axes
-    color = 'tab:blue'
-    ax1.set_xlabel('episode')
-    ax1.set_ylabel('actor variance', color=color)
-    ax1.plot([np.var(g) for g in grad_logs['Actor']], color=color)
-    ax1.tick_params(axis='y', labelcolor=color)
-
-
-    ax2 = ax1.twinx()  
-    color = 'tab:orange'
-    ax2.set_ylabel('critic variance', color=color)
-    ax2.plot([np.var(g) for g in grad_logs['Critic']], color=color)
-    ax2.tick_params(axis='y', labelcolor=color)
-    plt.title(title)
-    fig.tight_layout()
-    if save_path:
-        plt.savefig(os.path.join(save_path,'gradient_variance.png'))
-    plt.show()
-
 def regularization_search(save_path='results'):
     env = gym.make("Acrobot-v1")
     state_dim = env.observation_space.shape[0]
@@ -320,34 +300,51 @@ def regularization_search(save_path='results'):
             with open(os.path.join(save_path,'vary_eta.pickle'), 'wb') as f:
                 pickle.dump(results, f)
 
+import json
+
 def variance_study():
 
-    ## hyper_search_ac3(100)
-    # experiment()
-    # vary_eta()
-    
     env = gym.make("Acrobot-v1")
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.n
+    
+    # different configs
+    configs = [
+        {"baseline": True, "bootstrap": False},  
+        {"baseline": False, "bootstrap": True},  
+        {"baseline": True, "bootstrap": True},  
+        {"baseline": False, "bootstrap": False}  
+    ]
 
-    actor = Actor(state_dim, action_dim)
-    critic = Critic(state_dim)
-    actor_optimizer = optim.AdamW(actor.parameters(), lr=0.001)
-    critic_optimizer = optim.AdamW(critic.parameters(), lr=0.001)
-    
-    actor_grad_log, critic_grad_log, _, _, _ = train(env, actor, critic, actor_optimizer, critic_optimizer,False,False)
-    # print ("actor_grads ", actor_grad_log)
-    # print("critic_grads ", critic_grad_log)
-    combined_logs = {
-        "Actor": actor_grad_log,
-        "Critic": critic_grad_log
-    }
-    
-    plot_gradient_variance(combined_logs, save_path = 'results')
+    combined_logs = {}
+
+    for config in configs:
+        actor_grad_logs = []
+        for _ in range(5):  # 5 times for each config
+            actor = Actor(state_dim, action_dim)
+            critic = Critic(state_dim)
+            actor_optimizer = optim.AdamW(actor.parameters(), lr=0.001)
+            critic_optimizer = optim.AdamW(critic.parameters(), lr=0.001)
+
+            actor_grad_log, _, _, _, _ = train(env, actor, critic, actor_optimizer, critic_optimizer, config["baseline"], config["bootstrap"])
+            actor_grad_logs.append(actor_grad_log)
+
+        variances = []
+        for run_logs in actor_grad_logs:
+            run_variances = [np.var(g) for g in run_logs if np.any(g)]
+            variances.append(run_variances)
+        
+        avg_variances = np.mean(variances, axis=0)
+        combined_logs[f"Baseline: {config['baseline']}, Bootstrapping: {config['bootstrap']}"] = avg_variances
+
+        #export
+        file_name = f"results_config_{config['baseline']}_{config['bootstrap']}.json"
+        with open(file_name, 'w') as f:
+            json.dump({"avg_variances": avg_variances.tolist()}, f)
 
 
 def main():
-    experiment()
+    variance_study()
 
 if __name__ == '__main__':
     main()
