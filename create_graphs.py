@@ -15,9 +15,9 @@ def smooth(y, window, poly=2):
 def load_results(result_path = 'results'):
     # Load results from experiment from disk,
     # prepare data for presentation 
-    with open('RL_3/results/grid_search_ac3.pickle','rb') as f:
+    with open('results/grid_search_ac3.pickle','rb') as f:
         results_ac = pickle.load(f)
-    with open('RL_3/results/vary_eta.pickle', 'rb') as f:
+    with open('results/vary_eta.pickle', 'rb') as f:
         eta_dict = pickle.load(f)
 
     df_ac = pd.DataFrame().from_dict(results_ac)
@@ -81,6 +81,8 @@ def main():
 
     # Regularization plot
     fig, axs = plt.subplots(2,2, figsize=(10,8), sharex=True,sharey=True)
+    etas = [0.05, 0.01, 0.1, 1.0, 0.005]
+    keys = eta_dict[(False,True)][0.05]['eval_rewards'][0].keys()
     for base,boot in product([False,True],[False,True]):
 
         for i,eta in enumerate(etas):
