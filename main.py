@@ -1,5 +1,5 @@
 import argparse, os
-from ac_acrobat import hyperparameter_search, regularization_search
+from ac_acrobat import hyperparameter_search, regularization_search, variance_study
 import create_graphs 
 
 
@@ -18,7 +18,8 @@ def main():
 hyperparameter space")
     print("--regularization-study: train agents with different amount \
         of entropy regularization to study effect")
-    print("--variance-study: ...")
+    print("--variance-study: runs the algorithm with four different configurations \
+and saves the average of 5 runs to json files")
     print("--proces-results: proces results of grid search and \
 studies to generate graphs and tables used in the report")
     input("Press enter to continue...")
@@ -34,9 +35,9 @@ studies to generate graphs and tables used in the report")
         regularization_study = False  
     
     if args.variance_study:
-        variance_study = True
+        variance_stud = True
     else: 
-        variance_study = False
+        variance_stud = False
 
     if args.proces_results:
         proces_results = True
@@ -65,7 +66,8 @@ studies to generate graphs and tables used in the report")
     if regularization_study:
         regularization_search()
     
-    if variance_study:
+    if variance_stud:
+        variance_study()
         variance_study(save_path = 'results')
 
     if proces_results:

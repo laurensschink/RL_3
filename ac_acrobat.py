@@ -6,7 +6,7 @@ import torch.optim as optim
 from torch.distributions import Categorical
 import matplotlib
 import matplotlib.pyplot as plt
-from itertools import product 
+from itertools import product
 
 
 #### Search parameters:
@@ -255,7 +255,7 @@ def hyperparameter_search(nr_searches = 100,save_path = 'results'):
         summaries.append(param_dict)
         print(f'run {c} - {nr_searches} completed.')
         print(f'mean reward: {param_dict["avg_reward"]:.2f}, mean eval: {param_dict["avg_eval_reward"]:.2f}')
-        with open(os.path.join(save_path,'grid_search_ac3.pickle'), 'wb') as f:
+        with open(os.path.join('results','grid_search_ac3_2.pickle'), 'wb') as f:
             pickle.dump(summaries, f)
 
 def regularization_search(save_path='results'):
@@ -303,7 +303,7 @@ def regularization_search(save_path='results'):
 import json
 
 def variance_study():
-
+    
     env = gym.make("Acrobot-v1")
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.n
@@ -342,6 +342,47 @@ def variance_study():
         with open(file_name, 'w') as f:
             json.dump({"avg_variances": avg_variances.tolist()}, f)
 
+def vary_eta():
+    env = gym.make("Acrobot-v1")
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.n
+
+    max_eps = 801
+
+    combinations = {(False,True) :{'hidden_nodes':64,'lr':0.0001,'n_step':3},
+                    (False,False):{'hidden_nodes':64,'lr':0.001, 'n_step':3},
+                    (True,False) :{'hidden_nodes':32,'lr':0.001, 'n_step':3},
+                    (True,True)  :{'hidden_nodes':16,'lr':0.01,  'n_step':5}}
+
+#    etas = [0.05 , 0.01 , 0.1  , 1.   , 0.005]
+    etas = [0]
+#    results = {key:{eta:{'rewards':[],'eval_rewards':[]} for eta in etas} for key in combinations.keys()}
+    with open(os.path.join('results','vary_eta.pickle'), 'rb') as f:
+        results = pickle.load(f)
+    for combo in combinations.keys():
+        results[combo][0] = {'rewards':[],'eval_rewards':[]}
+    gamma = .99
+    
+    for baseline, bootstrap in combinations.keys():
+        param_dict = combinations[(baseline, bootstrap)]
+        hidden_nodes = int(param_dict['hidden_nodes'])
+        lr = param_dict['lr']
+        n_step = param_dict['n_step']
+        
+        for i,eta in product(range(5),etas):
+            print(f'Combination {baseline, bootstrap}, eta: {eta}, run {i+1}-5')
+            actor = Actor(state_dim, action_dim,hidden_nodes)
+            critic = Critic(state_dim, hidden_nodes)
+            actor_optimizer = optim.Adam(actor.parameters(), lr=lr)
+            critic_optimizer = optim.Adam(critic.parameters(), lr=lr)
+
+            episode_rewards, losses, eval_rewards= train(env, actor, critic, actor_optimizer, critic_optimizer, baseline, bootstrap,
+                    initial_entropy_weight=eta, n_step=n_step,  gamma=gamma,  num_episodes=max_eps)
+            results[baseline, bootstrap][eta]['rewards'].append(episode_rewards)
+            results[baseline, bootstrap][eta]['eval_rewards'].append(eval_rewards)
+
+            with open(os.path.join('results','vary_eta.pickle'), 'wb') as f:
+                pickle.dump(results, f)
 
 def main():
     variance_study()
